@@ -1,0 +1,10 @@
+aiohttp>=3.9
+websockets>=12.0
+gpiozero>=2.0
+smbus2>=0.4.1
+adafruit-circuitpython-dht>=3.7.0
+# Display ST7789 TFT
+Pillow>=10.0.0
+st7789>=0.0.6
+# lgpio vem do pacote do sistema (python3-lgpio via apt), nao daqui -
+# o venv precisa ser criado com --system-site-packages para enxergar

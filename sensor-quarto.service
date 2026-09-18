@@ -1,0 +1,26 @@
+[Unit]
+Description=Monitor de temperatura e umidade (DHT22 + LCD + Sinric Pro)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=raspberry
+Group=raspberry
+SupplementaryGroups=i2c gpio
+
+WorkingDirectory=/home/raspberry/sensor-pi
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/raspberry/sensor-pi/venv/bin/python /home/raspberry/sensor-pi/sensor_pi.py
+
+# Permite abrir a porta 80 sem rodar como root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

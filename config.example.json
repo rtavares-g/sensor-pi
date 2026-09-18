@@ -1,0 +1,27 @@
+{
+  "dht_gpio": 4,
+  "botao_gpio": 17,
+  "display_tipo": "st7789",
+  "porta_web": 8080,
+
+  "st7789": {
+    "mosi_gpio": 10,
+    "sclk_gpio": 11,
+    "cs_gpio": 8,
+    "dc_gpio": 25,
+    "rst_gpio": 24,
+    "bl_gpio": 18,
+    "width": 240,
+    "height": 240,
+    "rotation": 0,
+    "spi_speed_hz": 16000000
+  },
+
+  "sinric": {
+    "device_id": "SEU_DEVICE_ID_AQUI",
+    "app_key": "SUA_APP_KEY_AQUI",
+    "app_secret": "SEU_APP_SECRET_AQUI",
+    "instancia_temperatura": "temperatura",
+    "instancia_umidade": "umidade"
+  }
+}
