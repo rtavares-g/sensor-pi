@@ -415,73 +415,127 @@ def montar_leitor(simular: bool):
 # =========================================================================
 
 class Sinric:
-    """Conexão WebSocket para Sinric Pro."""
+    """Conexão WebSocket para Sinric Pro (protocolo Range)."""
     def __init__(self) -> None:
         self.ws = None
         self.conectado = False
         self.prox_reconectar = 0.0
+        self.timestamp_base = 0
+        self.timestamp_em = 0.0
 
-    async def conectar(self) -> None:
-        if self.conectado or time.monotonic() < self.prox_reconectar:
+    @property
+    def configurado(self) -> bool:
+        return bool(CFG["sinric"]["device_id"] and CFG["sinric"]["app_key"])
+
+    def agora(self) -> int:
+        if self.timestamp_base:
+            return int(self.timestamp_base + (time.monotonic() - self.timestamp_em))
+        return int(time.time())
+
+    def assinar(self, payload: str) -> str:
+        digest = hmac.new(
+            CFG["sinric"]["app_secret"].encode(),
+            payload.encode(), hashlib.sha256
+        ).digest()
+        return base64.b64encode(digest).decode()
+
+    def montar(self, instancia: str, valor: float, ts: int) -> str:
+        payload = (
+            '{"action":"setRangeValue",'
+            '"cause":{"type":"PERIODIC_POLL"},'
+            f'"createdAt":{ts},'
+            f'"deviceId":"{CFG["sinric"]["device_id"]}",'
+            f'"instanceId":"{instancia}",'
+            '"replyToken":"raspberry",'
+            '"type":"event",'
+            f'"value":{{"rangeValue":{valor:.1f}}}}}'
+        )
+        return (
+            '{"header":{"payloadVersion":2,"signatureVersion":1},'
+            f'"payload":{payload},'
+            f'"signature":{{"HMAC":"{self.assinar(payload)}"}}}}'
+        )
+
+    def _cabecalhos(self) -> dict[str, str]:
+        mac = "00:00:00:00:00:00"
+        try:
+            import glob
+            for caminho in sorted(glob.glob("/sys/class/net/*/address")):
+                if "/lo/" not in caminho:
+                    mac = Path(caminho).read_text().strip()
+                    break
+        except Exception:
+            pass
+        return {
+            "appkey": CFG["sinric"]["app_key"],
+            "deviceids": CFG["sinric"]["device_id"],
+            "restoredevicestates": "false",
+            "ip": socket.gethostbyname(socket.gethostname()),
+            "mac": mac,
+            "platform": "RaspberryPi",
+            "SDKVersion": "Py-Range-1.0",
+        }
+
+    async def _abrir(self):
+        url = f"ws://ws.sinric.pro/"
+        cabecalhos = self._cabecalhos()
+        try:
+            return await websockets.connect(
+                url, additional_headers=cabecalhos,
+                subprotocols=["arduino"], ping_interval=30, ping_timeout=20,
+            )
+        except TypeError:
+            return await websockets.connect(
+                url, extra_headers=cabecalhos,
+                subprotocols=["arduino"], ping_interval=30, ping_timeout=20,
+            )
+
+    async def tarefa(self) -> None:
+        if not self.configurado:
+            log("SINRIC: credenciais não configuradas")
             return
 
-        try:
-            device = CFG["sinric"]["device_id"]
-            key = CFG["sinric"]["app_key"]
-            secret = CFG["sinric"]["app_secret"]
+        while True:
+            try:
+                log("SINRIC: conectando...")
+                async with await self._abrir() as ws:
+                    self.ws = ws
+                    self.conectado = True
+                    estado.sinric_ok = True
+                    log("SINRIC: conectado")
 
-            url = f"wss://ws.sinric.pro/?deviceId={device}&authorization={key}"
+                    async for bruto in ws:
+                        try:
+                            msg = json.loads(bruto)
+                            ts = msg.get("timestamp")
+                            if ts:
+                                self.timestamp_base = int(ts)
+                                self.timestamp_em = time.monotonic()
+                        except Exception:
+                            continue
 
-            self.ws = await websockets.connect(url, origin="https://app.sinric.pro")
-            self.conectado = True
-            log("SINRIC: conectado")
-        except Exception as e:
+            except Exception as erro:
+                log(f"SINRIC: desconectado ({type(erro).__name__})")
+
+            self.ws = None
             self.conectado = False
-            self.prox_reconectar = time.monotonic() + 10
-            log(f"SINRIC: falha ({e})")
+            estado.sinric_ok = False
+            await asyncio.sleep(10)
 
-    async def enviar_leitura(self, temp: float, umid: float) -> None:
+    async def enviar_leitura(self, temp: float, umid: float) -> bool:
         if not self.conectado or not self.ws:
-            return
+            return False
 
+        ts = self.agora()
         try:
-            device = CFG["sinric"]["device_id"]
-            secret = CFG["sinric"]["app_secret"]
-
-            timestamp = int(time.time())
-            mensagem = json.dumps({
-                "deviceId": device,
-                "action": "reportState",
-                "states": [
-                    {"name": "temperature", "value": f"{temp:.1f}"},
-                    {"name": "humidity", "value": f"{umid:.1f}"},
-                ],
-                "replyToken": str(timestamp),
-            })
-
-            # Assinar com HMAC
-            assinatura = hmac.new(
-                secret.encode(),
-                mensagem.encode(),
-                hashlib.sha256
-            ).digest()
-
-            envelope = json.dumps({
-                "message": mensagem,
-                "signature": {
-                    "HMAC_SHA256": base64.b64encode(assinatura).decode()
-                }
-            })
-
-            await self.ws.send(envelope)
-        except Exception as e:
+            await self.ws.send(self.montar(CFG["sinric"]["instancia_temperatura"], temp, ts))
+            await self.ws.send(self.montar(CFG["sinric"]["instancia_umidade"], umid, ts))
+            return True
+        except Exception as erro:
             self.conectado = False
-            log(f"SINRIC: erro ao enviar ({e})")
-
-    async def desconectar(self) -> None:
-        if self.ws:
-            await self.ws.close()
-            self.conectado = False
+            estado.sinric_ok = False
+            log(f"SINRIC: falha ao enviar ({erro})")
+            return False
 
 sinric = Sinric()
 
@@ -888,11 +942,8 @@ async def principal(simular: bool) -> None:
     except Exception:
         pass
 
-    # Conectar Sinric
-    await sinric.conectar()
-    if sinric.conectado:
-        estado.sinric_ok = True
-        log("SINRIC: conectado")
+    # Iniciar Sinric em background
+    asyncio.create_task(sinric.tarefa())
 
     # Iniciar servidor HTTP
     runner = await subir_servidor()
@@ -902,7 +953,6 @@ async def principal(simular: bool) -> None:
         await ciclo(leitor, display)
     except KeyboardInterrupt:
         log("Encerrando...")
-        await sinric.desconectar()
         await runner.cleanup()
 
 # =========================================================================
