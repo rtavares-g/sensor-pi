@@ -34,10 +34,38 @@ fi
 if [ ! -f config.json ]; then
     cp config.example.json config.json
     chmod 600 config.json
+
     echo
-    echo "==> config.json criado a partir do exemplo."
-    echo "==> Edite config.json com as chaves do Sinric Pro antes de continuar: nano config.json"
+    echo "==> Configuracao do Sinric Pro (deixe em branco para pular e editar depois)"
+    read -rp "Device ID: " SINRIC_DEVICE_ID
+    read -rp "App Key: " SINRIC_APP_KEY
+    read -rsp "App Secret: " SINRIC_APP_SECRET
     echo
+
+    python3 - "$SINRIC_DEVICE_ID" "$SINRIC_APP_KEY" "$SINRIC_APP_SECRET" <<'PYEOF'
+import json
+import sys
+
+device_id, app_key, app_secret = sys.argv[1:4]
+
+with open("config.json") as f:
+    cfg = json.load(f)
+
+if device_id:
+    cfg["sinric"]["device_id"] = device_id
+if app_key:
+    cfg["sinric"]["app_key"] = app_key
+if app_secret:
+    cfg["sinric"]["app_secret"] = app_secret
+
+with open("config.json", "w") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYEOF
+
+    if [ -z "$SINRIC_DEVICE_ID" ] || [ -z "$SINRIC_APP_KEY" ] || [ -z "$SINRIC_APP_SECRET" ]; then
+        echo "==> Algum campo do Sinric ficou em branco - edite depois com: nano $(pwd)/config.json"
+    fi
 fi
 
 if [ ! -d venv ]; then
@@ -57,3 +85,42 @@ fi
 
 sudo systemctl enable --now sensor-quarto
 systemctl status sensor-quarto --no-pager
+
+echo
+read -rp "Configurar HTTPS com Nginx + Let's Encrypt agora? Requer dominio ja apontando pro IP publico e portas 80/443 liberadas no roteador [s/N]: " CONFIGURAR_HTTPS
+if [[ "$CONFIGURAR_HTTPS" =~ ^[sS] ]]; then
+    read -rp "Dominio (ex: sensor.seudominio.com): " DOMINIO
+    read -rp "E-mail para avisos do Let's Encrypt: " EMAIL_CERTBOT
+
+    sudo apt install -y nginx certbot python3-certbot-nginx
+
+    NGINX_CONF="/etc/nginx/sites-available/sensor-quarto"
+    sudo tee "$NGINX_CONF" > /dev/null <<EOF
+server {
+    listen 80;
+    server_name $DOMINIO;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        # obrigatorio para o /logs (console remoto via WebSocket)
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+    }
+}
+EOF
+
+    sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/sensor-quarto
+    sudo nginx -t
+    sudo systemctl reload nginx
+
+    sudo certbot --nginx -d "$DOMINIO" --non-interactive --agree-tos -m "$EMAIL_CERTBOT" --redirect
+
+    echo "==> HTTPS configurado. Teste com: curl -I https://$DOMINIO/"
+fi

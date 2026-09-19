@@ -31,13 +31,21 @@ cd ~/sensor-pi
 ```
 
 O `install.sh` instala as dependências do sistema, habilita I2C/SPI/DHT22,
-cria `config.json` a partir do exemplo, monta o venv e instala o serviço.
-Se for a primeira vez habilitando I2C/SPI/DHT22, ele avisa para reiniciar
-(`sudo reboot`) e, na volta, basta rodar `sudo systemctl enable --now
-sensor-quarto` (as interfaces já ficam habilitadas, então rodar
-`./install.sh` de novo também funciona). Antes do serviço funcionar de
-verdade, edite `config.json` com as chaves do Sinric Pro:
-`nano ~/sensor-pi/config.json`.
+cria `config.json` a partir do exemplo e pede no terminal o **Device ID**,
+**App Key** e **App Secret** do Sinric Pro (nada de editar arquivo à mão -
+se deixar algum campo em branco, ele avisa para completar depois com
+`nano config.json`), monta o venv e instala o serviço. Se for a primeira
+vez habilitando I2C/SPI/DHT22, ele avisa para reiniciar (`sudo reboot`) e,
+na volta, basta rodar `sudo systemctl enable --now sensor-quarto` (as
+interfaces já ficam habilitadas, então rodar `./install.sh` de novo também
+funciona).
+
+No final, o script também pergunta se você quer configurar HTTPS com
+Nginx + Let's Encrypt agora (opcional). Se responder que sim, ele pede o
+domínio e o e-mail para o Certbot e configura tudo sozinho - veja os
+pré-requisitos (domínio e portas 80/443) na seção
+[HTTPS com Nginx + Let's Encrypt](#https-com-nginx--lets-encrypt-opcional)
+abaixo.
 
 ## Instalação manual (passo a passo)
 
