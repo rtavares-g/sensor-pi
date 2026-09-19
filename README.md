@@ -22,7 +22,24 @@ Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + se
 O display é um TFT SPI 240x240 baseado no controlador ST7789 (rotulado
 "SPI-ST7789" na placa, 8 pinos: GND, VCC, SCL, SDA, RST, DC, CS, BL).
 
-## Instalação
+## Instalação automática
+
+```bash
+git clone https://github.com/rtavares-g/sensor-pi.git ~/sensor-pi
+cd ~/sensor-pi
+./install.sh
+```
+
+O `install.sh` instala as dependências do sistema, habilita I2C/SPI/DHT22,
+cria `config.json` a partir do exemplo, monta o venv e instala o serviço.
+Se for a primeira vez habilitando I2C/SPI/DHT22, ele avisa para reiniciar
+(`sudo reboot`) e, na volta, basta rodar `sudo systemctl enable --now
+sensor-quarto` (as interfaces já ficam habilitadas, então rodar
+`./install.sh` de novo também funciona). Antes do serviço funcionar de
+verdade, edite `config.json` com as chaves do Sinric Pro:
+`nano ~/sensor-pi/config.json`.
+
+## Instalação manual (passo a passo)
 
 ```bash
 sudo apt update
