@@ -477,7 +477,7 @@ class Sinric:
         }
 
     async def _abrir(self):
-        url = f"ws://ws.sinric.pro/"
+        url = f"wss://ws.sinric.pro/"
         cabecalhos = self._cabecalhos()
         try:
             return await websockets.connect(
