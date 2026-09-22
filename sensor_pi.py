@@ -151,6 +151,7 @@ class DisplayST7789:
         self.historico_umid = deque(maxlen=60)
         self.alerta_ate = 0.0
         self.backlight = None
+        self.nivel_backlight = 1.0
 
         if simular:
             log("DISPLAY: modo simulado")
@@ -356,6 +357,7 @@ class DisplayST7789:
         nivel = max(0.0, min(1.0, nivel))
         if self.backlight is not None:
             self.backlight.value = nivel
+        self.nivel_backlight = nivel
         log(f"DISPLAY: backlight {nivel:.0%}")
 
     def backlight_off(self) -> None:
@@ -751,6 +753,21 @@ async def rota_backlight(request: web.Request) -> web.Response:
             font-size: 12px;
             margin-top: 20px;
         }
+        .voltar {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 10px;
+            background: #f5f5f5;
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .voltar:hover {
+            background: #f0f4ff;
+        }
     </style>
 </head>
 <body>
@@ -758,7 +775,7 @@ async def rota_backlight(request: web.Request) -> web.Response:
         <h1>💡 Backlight</h1>
 
         <div class="display">
-            <div class="valor" id="valor">100%</div>
+            <div class="valor" id="valor">…</div>
             <div class="label">Brilho</div>
         </div>
 
@@ -782,6 +799,8 @@ async def rota_backlight(request: web.Request) -> web.Response:
         <div class="status">
             <span id="status">Pronto</span>
         </div>
+
+        <a class="voltar" href="/">← Voltar</a>
     </div>
 
     <script>
@@ -813,6 +832,18 @@ async def rota_backlight(request: web.Request) -> web.Response:
             atualizarDisplay(0);
         }
 
+        function carregar() {
+            fetch('/backlight?status')
+                .then(r => r.json())
+                .then(d => atualizarDisplay(Math.round(d.backlight * 100)))
+                .catch(e => {
+                    status.textContent = '✗ Erro ao ler status: ' + e.message;
+                    console.error(e);
+                });
+        }
+
+        carregar();
+
         function enviar(nivel, param) {
             param = param || ('?nivel=' + nivel.toFixed(2));
 
@@ -833,6 +864,8 @@ async def rota_backlight(request: web.Request) -> web.Response:
 </html>"""
         return web.Response(text=html, content_type="text/html")
 
+    if "status" in request.query:
+        return web.json_response({"backlight": display.nivel_backlight})
     if "off" in request.query_string:
         display.backlight_off()
         return web.json_response({"backlight": 0.0})
@@ -843,7 +876,7 @@ async def rota_backlight(request: web.Request) -> web.Response:
     try:
         nivel = float(request.query.get("nivel", 1.0))
         display.set_backlight(nivel)
-        return web.json_response({"backlight": max(0.0, min(1.0, nivel))})
+        return web.json_response({"backlight": display.nivel_backlight})
     except ValueError:
         return web.json_response({"erro": "nivel deve ser 0.0 a 1.0"}, status=400)
 
