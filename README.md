@@ -1,4 +1,4 @@
-# Monitor DHT22 — Raspberry Pi
+# Clima quarto — Raspberry Pi
 
 Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + servidor web).
 
