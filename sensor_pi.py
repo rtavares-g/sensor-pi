@@ -95,38 +95,63 @@ estado = Estado()
 display = None  # Será inicializado em principal()
 
 class Console:
-    """Redireciona print() para log e WebSocket."""
+    """Redireciona print() e erros (stdout/stderr) para log e WebSocket."""
     def __init__(self) -> None:
-        self.linhas = deque(maxlen=200)
+        self.linhas = deque(maxlen=1000)
         self.clientes = set()
         self.original_stdout = sys.stdout
 
-    def write(self, msg: str) -> None:
-        if msg.strip():
-            hora = datetime.now().strftime("%H:%M:%S")
-            linha = f"[{hora}] {msg.strip()}"
-            self.linhas.append(linha)
-            self.original_stdout.write(linha + "\n")
-            self.original_stdout.flush()
-            asyncio.create_task(self._broadcast(linha))
+    def stream(self, original, prefixo: str = "") -> "_Fluxo":
+        return _Fluxo(self, original, prefixo)
 
-    def flush(self) -> None:
-        self.original_stdout.flush()
+    def registrar(self, texto: str, original) -> None:
+        hora = datetime.now().strftime("%H:%M:%S")
+        linha = f"[{hora}] {texto}"
+        self.linhas.append(linha)
+        original.write(linha + "\n")
+        original.flush()
+        try:
+            asyncio.get_running_loop().create_task(self._broadcast(linha))
+        except RuntimeError:
+            pass  # fora do event loop: fica só no histórico
 
     async def _broadcast(self, msg: str) -> None:
         mortos = set()
         for ws in self.clientes:
             try:
-                await ws.send_str(msg + "\n")
+                await ws.send_str(msg)
             except Exception:
                 mortos.add(ws)
         self.clientes -= mortos
 
-    def historico(self, n: int = 50) -> list[str]:
-        return list(self.linhas)[-n:]
+    def historico(self) -> list[str]:
+        return list(self.linhas)
+
+class _Fluxo:
+    """Arquivo que junta escritas parciais e registra cada linha completa."""
+    def __init__(self, console: Console, original, prefixo: str) -> None:
+        self.console = console
+        self.original = original
+        self.prefixo = prefixo
+        self.buffer = ""
+
+    def write(self, msg: str) -> int:
+        self.buffer += msg
+        *completas, self.buffer = self.buffer.split("\n")
+        for linha in completas:
+            if linha.strip():
+                self.console.registrar(self.prefixo + linha.rstrip(), self.original)
+        return len(msg)
+
+    def flush(self) -> None:
+        if self.buffer.strip():
+            self.console.registrar(self.prefixo + self.buffer.rstrip(), self.original)
+        self.buffer = ""
+        self.original.flush()
 
 console = Console()
-sys.stdout = console
+sys.stdout = console.stream(sys.stdout)
+sys.stderr = console.stream(sys.stderr, "STDERR: ")
 
 def log(msg: str) -> None:
     print(msg)
@@ -379,6 +404,7 @@ class LeitorIIO:
             log(f"SENSOR: dispositivo IIO em {caminho}")
         else:
             log("SENSOR: nenhum dispositivo IIO encontrado (in_temp_input)")
+        self.ultimo_erro = None
         self.temp = Path(caminho) / "in_temp_input" if caminho else None
         self.umid = Path(caminho) / "in_humidityrelative_input" if caminho else None
 
@@ -396,8 +422,10 @@ class LeitorIIO:
         try:
             temp = int(self.temp.read_text().strip()) / 1000.0
             umid = int(self.umid.read_text().strip()) / 1000.0
+            self.ultimo_erro = None
             return temp, umid
-        except Exception:
+        except Exception as erro:
+            self.ultimo_erro = erro
             return None
 
 class LeitorSimulado:
@@ -882,14 +910,169 @@ async def rota_backlight(request: web.Request) -> web.Response:
 
 async def rota_logs(request: web.Request) -> web.StreamResponse:
     if request.headers.get("Upgrade", "").lower() != "websocket":
-        html = f"""<html><head><title>Logs</title><style>
-body {{ background: #000; color: #0f0; font-family: monospace; padding: 20px; }}
-pre {{ max-height: 600px; overflow-y: auto; }}
-</style></head><body>
-<h1>Console Remoto</h1>
-<pre>{''.join(console.historico())}</pre>
-<p><a href='/'>← Voltar</a></p>
-</body></html>"""
+        historico = json.dumps(console.historico()).replace("</", "<\\/")
+        html = r"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logs - Clima Quarto</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+       height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px;
+         background: #161b22; border-bottom: 1px solid #30363d; }
+header h1 { font-size: 17px; margin-right: auto; }
+.estado { font-size: 12px; color: #8b949e; display: flex; align-items: center; gap: 6px; }
+.ponto { width: 9px; height: 9px; border-radius: 50%; background: #f85149; }
+.ponto.on { background: #3fb950; }
+input[type=search] { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+                     padding: 6px 10px; font-size: 13px; min-width: 160px; }
+button, a.btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+                padding: 6px 10px; font-size: 13px; cursor: pointer; text-decoration: none; }
+button:hover, a.btn:hover { background: #30363d; }
+button.ativo { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+#logs { flex: 1; overflow-y: auto; padding: 10px 14px; font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.linha.erro { color: #f85149; }
+.linha.aviso { color: #d29922; }
+.linha.ok { color: #3fb950; }
+.linha.leitura { color: #79c0ff; }
+.linha .hora { color: #6e7681; }
+footer { font-size: 12px; color: #8b949e; padding: 6px 14px; background: #161b22; border-top: 1px solid #30363d; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📜 Console Remoto</h1>
+  <span class="estado"><span class="ponto" id="ponto"></span><span id="conexao">conectando...</span></span>
+  <input type="search" id="filtro" placeholder="Filtrar...">
+  <button id="btnRolar" class="ativo" title="Rolar automaticamente para o fim">⬇ Auto</button>
+  <button id="btnPausar">⏸ Pausar</button>
+  <button id="btnLimpar">🗑 Limpar</button>
+  <button id="btnBaixar">💾 Baixar</button>
+  <a class="btn" href="/">← Voltar</a>
+</header>
+<div id="logs"></div>
+<footer><span id="contagem">0 linhas</span></footer>
+<script>
+const HISTORICO = __HISTORICO__;
+const MAX = 2000;
+const logs = document.getElementById('logs');
+const filtro = document.getElementById('filtro');
+const ponto = document.getElementById('ponto');
+const conexao = document.getElementById('conexao');
+const contagem = document.getElementById('contagem');
+const btnRolar = document.getElementById('btnRolar');
+const btnPausar = document.getElementById('btnPausar');
+let linhas = [];
+let pendentes = [];
+let rolar = true;
+let pausado = false;
+
+function classe(texto) {
+  const t = texto.toLowerCase();
+  if (t.includes('leitura:')) return 'leitura';
+  if (/erro|falha|traceback|exception|stderr|desconectado/.test(t)) return 'erro';
+  if (/aviso|warning|reconect|sem dados|não configurad/.test(t)) return 'aviso';
+  if (/conectado|ok\b|iniciado/.test(t)) return 'ok';
+  return '';
+}
+
+function criar(texto) {
+  const div = document.createElement('div');
+  div.className = 'linha ' + classe(texto);
+  const m = texto.match(/^(\[[^\]]+\])(.*)$/);
+  if (m) {
+    const hora = document.createElement('span');
+    hora.className = 'hora';
+    hora.textContent = m[1];
+    div.append(hora, m[2]);
+  } else {
+    div.textContent = texto;
+  }
+  div.dataset.texto = texto.toLowerCase();
+  return div;
+}
+
+function visivel(div) {
+  const f = filtro.value.trim().toLowerCase();
+  return !f || div.dataset.texto.includes(f);
+}
+
+function adicionar(texto) {
+  linhas.push(texto);
+  const div = criar(texto);
+  div.hidden = !visivel(div);
+  logs.appendChild(div);
+  while (linhas.length > MAX) { linhas.shift(); logs.firstChild.remove(); }
+}
+
+function atualizarRodape() {
+  const vis = logs.querySelectorAll('.linha:not([hidden])').length;
+  contagem.textContent = (vis === linhas.length ? linhas.length + ' linhas' : vis + ' de ' + linhas.length + ' linhas')
+    + (pausado && pendentes.length ? ' · ' + pendentes.length + ' novas em espera' : '');
+}
+
+function fim() { if (rolar) logs.scrollTop = logs.scrollHeight; }
+
+HISTORICO.forEach(adicionar);
+atualizarRodape();
+fim();
+
+filtro.addEventListener('input', () => {
+  logs.querySelectorAll('.linha').forEach(d => d.hidden = !visivel(d));
+  atualizarRodape();
+  fim();
+});
+
+btnRolar.onclick = () => { rolar = !rolar; btnRolar.classList.toggle('ativo', rolar); fim(); };
+
+logs.addEventListener('scroll', () => {
+  const noFim = logs.scrollHeight - logs.scrollTop - logs.clientHeight < 30;
+  if (rolar !== noFim) { rolar = noFim; btnRolar.classList.toggle('ativo', rolar); }
+});
+
+btnPausar.onclick = () => {
+  pausado = !pausado;
+  btnPausar.textContent = pausado ? '▶ Continuar' : '⏸ Pausar';
+  btnPausar.classList.toggle('ativo', pausado);
+  if (!pausado) { pendentes.forEach(adicionar); pendentes = []; fim(); }
+  atualizarRodape();
+};
+
+document.getElementById('btnLimpar').onclick = () => {
+  linhas = []; pendentes = []; logs.innerHTML = ''; atualizarRodape();
+};
+
+document.getElementById('btnBaixar').onclick = () => {
+  const blob = new Blob([linhas.join('\n') + '\n'], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'clima-quarto-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.log';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+function conectar() {
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/logs');
+  ws.onopen = () => { ponto.classList.add('on'); conexao.textContent = 'ao vivo'; };
+  ws.onmessage = e => {
+    if (pausado) { pendentes.push(e.data); }
+    else { adicionar(e.data); fim(); }
+    atualizarRodape();
+  };
+  ws.onclose = () => {
+    ponto.classList.remove('on');
+    conexao.textContent = 'desconectado, tentando de novo...';
+    setTimeout(conectar, 3000);
+  };
+}
+conectar();
+</script>
+</body>
+</html>""".replace("__HISTORICO__", historico)
         return web.Response(text=html, content_type="text/html")
 
     ws = web.WebSocketResponse(heartbeat=30)
@@ -933,6 +1116,7 @@ async def subir_servidor() -> web.AppRunner:
 
 async def ciclo(leitor, display_obj) -> None:
     prox_sinric = 0.0
+    falhas_minuto = 0
 
     while True:
         await asyncio.sleep(5)
@@ -940,6 +1124,9 @@ async def ciclo(leitor, display_obj) -> None:
         try:
             leitura = leitor.ler()
             if leitura:
+                if estado.falhas_sensor >= 2:
+                    log(f"SENSOR: leitura OK após {estado.falhas_sensor} falha(s) "
+                        f"({leitura[0]:.1f}°C, {leitura[1]:.1f}%)")
                 estado.temperatura, estado.umidade = leitura
                 estado.sensor_ok = True
                 estado.falhas_sensor = 0
@@ -951,15 +1138,24 @@ async def ciclo(leitor, display_obj) -> None:
                 )
             else:
                 estado.falhas_sensor += 1
-                if estado.falhas_sensor > 3:
+                falhas_minuto += 1
+                motivo = getattr(leitor, "ultimo_erro", None) or "sem dados"
+                if estado.falhas_sensor == 2:
+                    log(f"SENSOR: falhas seguidas na leitura ({motivo})")
+                if estado.falhas_sensor > 3 and estado.sensor_ok:
                     estado.sensor_ok = False
+                    log("SENSOR: marcado como FALHA após 4 leituras seguidas sem sucesso")
         except Exception as e:
             estado.sensor_ok = False
             log(f"SENSOR: erro ({e})")
 
         # Atualizar Sinric a cada 60s
         if time.monotonic() >= prox_sinric and estado.sensor_ok:
-            await sinric.enviar_leitura(estado.temperatura, estado.umidade)
+            enviado = await sinric.enviar_leitura(estado.temperatura, estado.umidade)
+            log(f"LEITURA: {estado.temperatura:.1f}°C  {estado.umidade:.1f}%  "
+                f"(Sinric: {'enviado' if enviado else 'não enviado'}, "
+                f"falhas de leitura: {falhas_minuto})")
+            falhas_minuto = 0
             prox_sinric = time.monotonic() + 60
 
 async def principal(simular: bool) -> None:
