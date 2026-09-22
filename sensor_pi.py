@@ -227,7 +227,7 @@ class DisplayST7789:
         self.draw.text((120, 50), "Iniciando...", fill=(0, 200, 255), font=self.fonte_grande, anchor="mm")
 
         # Subtítulo
-        self.draw.text((120, 150), "Monitor DHT22", fill=(100, 150, 255), font=self.fonte_media, anchor="mm")
+        self.draw.text((120, 150), "Clima quarto", fill=(100, 150, 255), font=self.fonte_media, anchor="mm")
 
         # Versão
         self.draw.text((120, 210), "v1.0 ST7789", fill=(80, 80, 80), font=self.fonte_pequena, anchor="mm")
@@ -546,7 +546,7 @@ sinric = Sinric()
 async def rota_painel(_: web.Request) -> web.Response:
     html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Monitor DHT22</title>
+<title>Clima quarto</title>
 <style>
 body {{ font-family: sans-serif; margin: 20px; background: #0a1e3c; color: #fff; }}
 .container {{ max-width: 600px; margin: 0 auto; }}
@@ -563,7 +563,7 @@ a:hover {{ text-decoration: underline; }}
 </style>
 </head><body>
 <div class='container'>
-<h1>🌡️ Monitor DHT22</h1>
+<h1>🌡️ Clima quarto</h1>
 <div class='stats'>
 <div class='stat'>
 <div class='stat-value' id='temp'>--</div>
@@ -927,7 +927,7 @@ async def principal(simular: bool) -> None:
     global display
 
     display = DisplayST7789(simular)
-    display.passo("Iniciando...", "Monitor DHT22")
+    display.passo("Iniciando...", "Clima quarto")
     await asyncio.sleep(1)
 
     leitor = montar_leitor(simular)
