@@ -300,8 +300,8 @@ class DisplayST7789:
             fill=cor,
         )
 
-    def desenhar_sensor(self, temp: float, umid: float, sinric_ok: bool, sensor_ok: bool) -> None:
-        """Desenha tela com temperatura e umidade."""
+    def desenhar_sensor(self, temp: float | None, umid: float | None, sinric_ok: bool, sensor_ok: bool) -> None:
+        """Desenha tela com temperatura e umidade (None = sem leitura ainda)."""
         if not self.display:
             return
 
@@ -311,8 +311,13 @@ class DisplayST7789:
         self.draw = ImageDraw.Draw(self.imagem)
 
         # Cores baseadas no status
-        cor_temp = (255, 100, 50) if temp > 30 else (100, 200, 255) if temp < 15 else (100, 255, 100)
-        cor_umid = (100, 180, 255)
+        if not sensor_ok or temp is None:
+            cor_temp = cor_umid = (150, 150, 165)  # valores antigos/ausentes em cinza
+        else:
+            cor_temp = (255, 100, 50) if temp > 30 else (100, 200, 255) if temp < 15 else (100, 255, 100)
+            cor_umid = (100, 180, 255)
+        texto_temp = f"{temp:.1f}°C" if temp is not None else "--°C"
+        texto_umid = f"{umid:.1f}%" if umid is not None else "--%"
 
         # --- Título ---
         self.draw.text((120, 14), "Clima Quarto", fill=(220, 220, 240), font=self.fonte_titulo, anchor="mm")
@@ -320,7 +325,7 @@ class DisplayST7789:
         # --- Temperatura ---
         self._icone_termometro(cx=45, cy=95, altura=55, cor=cor_temp)
         self.draw.text((88, 48), "Temperatura", fill=(160, 160, 185), font=self.fonte_pequena, anchor="lm")
-        self.draw.text((88, 82), f"{temp:.1f}°C", fill=cor_temp, font=self.fonte_valor, anchor="lm")
+        self.draw.text((88, 82), texto_temp, fill=cor_temp, font=self.fonte_valor, anchor="lm")
 
         # Linha divisória
         self.draw.line([(15, 122), (225, 122)], fill=(50, 60, 95), width=1)
@@ -328,7 +333,7 @@ class DisplayST7789:
         # --- Umidade ---
         self._icone_gota(cx=45, cy=168, raio=15, cor=cor_umid)
         self.draw.text((88, 148), "Umidade", fill=(160, 160, 185), font=self.fonte_pequena, anchor="lm")
-        self.draw.text((88, 182), f"{umid:.1f}%", fill=cor_umid, font=self.fonte_valor, anchor="lm")
+        self.draw.text((88, 182), texto_umid, fill=cor_umid, font=self.fonte_valor, anchor="lm")
 
         # --- Status no rodapé ---
         status_sensor = "✓ OK" if sensor_ok else "✗ FALHA"
@@ -1130,24 +1135,28 @@ async def ciclo(leitor, display_obj) -> None:
                 estado.temperatura, estado.umidade = leitura
                 estado.sensor_ok = True
                 estado.falhas_sensor = 0
-                display_obj.desenhar_sensor(
-                    estado.temperatura,
-                    estado.umidade,
-                    estado.sinric_ok,
-                    True
-                )
             else:
                 estado.falhas_sensor += 1
                 falhas_minuto += 1
                 motivo = getattr(leitor, "ultimo_erro", None) or "sem dados"
                 if estado.falhas_sensor == 2:
                     log(f"SENSOR: falhas seguidas na leitura ({motivo})")
-                if estado.falhas_sensor > 3 and estado.sensor_ok:
+                if estado.falhas_sensor == 4:
                     estado.sensor_ok = False
                     log("SENSOR: marcado como FALHA após 4 leituras seguidas sem sucesso")
         except Exception as e:
             estado.sensor_ok = False
             log(f"SENSOR: erro ({e})")
+
+        # Redesenha todo ciclo para refletir falha do sensor e status do Sinric.
+        # No boot, mantém "Iniciando..." até a 1ª leitura ou até confirmar a falha.
+        if estado.temperatura is not None or estado.falhas_sensor > 3:
+            display_obj.desenhar_sensor(
+                estado.temperatura,
+                estado.umidade,
+                estado.sinric_ok,
+                estado.sensor_ok,
+            )
 
         # Atualizar Sinric a cada 60s
         if time.monotonic() >= prox_sinric and estado.sensor_ok:
