@@ -146,6 +146,7 @@ class DisplayST7789:
         self.fonte_grande = None
         self.fonte_media = None
         self.fonte_pequena = None
+        self.fonte_titulo = None
         self.historico_temp = deque(maxlen=60)
         self.historico_umid = deque(maxlen=60)
         self.alerta_ate = 0.0
@@ -202,11 +203,13 @@ class DisplayST7789:
                 self.fonte_valor = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
                 self.fonte_media = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
                 self.fonte_pequena = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+                self.fonte_titulo = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
             except:
                 self.fonte_grande = ImageFont.load_default()
                 self.fonte_valor = ImageFont.load_default()
                 self.fonte_media = ImageFont.load_default()
                 self.fonte_pequena = ImageFont.load_default()
+                self.fonte_titulo = ImageFont.load_default()
 
             log(f"DISPLAY: ST7789 {cfg['width']}x{cfg['height']} pronto")
             self.desenhar_boot()
@@ -227,7 +230,7 @@ class DisplayST7789:
         self.draw.text((120, 50), "Iniciando...", fill=(0, 200, 255), font=self.fonte_grande, anchor="mm")
 
         # Subtítulo
-        self.draw.text((120, 150), "Clima quarto", fill=(100, 150, 255), font=self.fonte_media, anchor="mm")
+        self.draw.text((120, 150), "Clima Quarto", fill=(100, 150, 255), font=self.fonte_media, anchor="mm")
 
         # Versão
         self.draw.text((120, 210), "v1.0 ST7789", fill=(80, 80, 80), font=self.fonte_pequena, anchor="mm")
@@ -284,6 +287,9 @@ class DisplayST7789:
         # Cores baseadas no status
         cor_temp = (255, 100, 50) if temp > 30 else (100, 200, 255) if temp < 15 else (100, 255, 100)
         cor_umid = (100, 180, 255)
+
+        # --- Título ---
+        self.draw.text((120, 14), "Clima Quarto", fill=(220, 220, 240), font=self.fonte_titulo, anchor="mm")
 
         # --- Temperatura ---
         self._icone_termometro(cx=45, cy=95, altura=55, cor=cor_temp)
@@ -546,7 +552,7 @@ sinric = Sinric()
 async def rota_painel(_: web.Request) -> web.Response:
     html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>Clima quarto</title>
+<title>Clima Quarto</title>
 <style>
 body {{ font-family: sans-serif; margin: 20px; background: #0a1e3c; color: #fff; }}
 .container {{ max-width: 600px; margin: 0 auto; }}
@@ -563,7 +569,7 @@ a:hover {{ text-decoration: underline; }}
 </style>
 </head><body>
 <div class='container'>
-<h1>🌡️ Clima quarto</h1>
+<h1>🌡️ Clima Quarto</h1>
 <div class='stats'>
 <div class='stat'>
 <div class='stat-value' id='temp'>--</div>
@@ -927,7 +933,7 @@ async def principal(simular: bool) -> None:
     global display
 
     display = DisplayST7789(simular)
-    display.passo("Iniciando...", "Clima quarto")
+    display.passo("Iniciando...", "Clima Quarto")
     await asyncio.sleep(1)
 
     leitor = montar_leitor(simular)
