@@ -40,11 +40,12 @@ na volta, basta rodar `sudo systemctl enable --now sensor-quarto` (as
 interfaces já ficam habilitadas, então rodar `./install.sh` de novo também
 funciona).
 
-O `install.sh` não mexe em Nginx nem certificado - o painel fica só em
-`http://<ip-do-pi>:8080`. Expor num domínio próprio com HTTPS (Nginx +
-Let's Encrypt) é feito à parte, fora do instalador - veja
-[`quarto-gui`](https://github.com/rtavares-g/quarto-gui) para uma página
-com links para os painéis deste Raspberry Pi.
+No final, ele pergunta se você quer configurar HTTPS com Nginx + Let's
+Encrypt agora (opcional). Se responder que sim, pede o domínio (precisa já
+apontar pro IP público, registro DNS tipo `A`) e o e-mail para o Certbot, e
+configura o proxy reverso e o certificado sozinho - teste depois com
+`curl -I https://seu-dominio/`. Requer as portas 80 e 443 liberadas no
+roteador (port forwarding) para o IP local do Raspberry Pi.
 
 ## Instalação manual (passo a passo)
 
