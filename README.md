@@ -40,12 +40,11 @@ na volta, basta rodar `sudo systemctl enable --now sensor-quarto` (as
 interfaces já ficam habilitadas, então rodar `./install.sh` de novo também
 funciona).
 
-No final, o script também pergunta se você quer configurar HTTPS com
-Nginx + Let's Encrypt agora (opcional). Se responder que sim, ele pede o
-domínio e o e-mail para o Certbot e configura tudo sozinho - veja os
-pré-requisitos (domínio e portas 80/443) na seção
-[HTTPS com Nginx + Let's Encrypt](#https-com-nginx--lets-encrypt-opcional)
-abaixo.
+O `install.sh` não mexe em Nginx nem certificado - o painel fica só em
+`http://<ip-do-pi>:8080`. Expor num domínio próprio com HTTPS (Nginx +
+Let's Encrypt) é feito à parte, fora do instalador - veja
+[`quarto-gui`](https://github.com/rtavares-g/quarto-gui) para uma página
+com links para os painéis deste Raspberry Pi.
 
 ## Instalação manual (passo a passo)
 
@@ -111,101 +110,6 @@ journalctl -u sensor-quarto -f
 | `/logs` | console remoto ao vivo (WebSocket) |
 | `/sensor` | JSON com tudo |
 | `/backlight` | página interativa para controlar o brilho do display |
-
-## HTTPS com Nginx + Let's Encrypt (opcional)
-
-Se quiser acessar o painel por fora da rede local com um domínio próprio e
-certificado válido (em vez de `http://192.168.x.x:8080`), coloque um Nginx
-na frente da aplicação como proxy reverso.
-
-### 1. Pré-requisitos
-
-- Um domínio (ou subdomínio) apontando para o IP público da sua rede
-  (registro DNS tipo `A`).
-- Porta **80** e **443** redirecionadas no roteador para o IP local do
-  Raspberry Pi (port forwarding).
-
-### 2. Instalar Nginx e Certbot
-
-```bash
-sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx
-```
-
-### 3. Configurar o proxy reverso
-
-Substitua `seu-dominio.exemplo.com` pelo seu domínio real:
-
-```bash
-sudo nano /etc/nginx/sites-available/sensor-quarto
-```
-
-```nginx
-server {
-    listen 80;
-    server_name seu-dominio.exemplo.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # obrigatório para o /logs (console remoto via WebSocket)
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
-    }
-}
-```
-
-Sem os três headers de WebSocket (`Upgrade`, `Connection`, `proxy_read_timeout`),
-o `/logs` fica preso em "desconectado, tentando de novo..." — o Nginx não
-repassa o handshake de upgrade do WebSocket por padrão.
-
-Ative o site e teste a configuração:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/sensor-quarto /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-Confirme que `http://seu-dominio.exemplo.com` já abre o painel (ainda sem
-HTTPS) antes de seguir pro próximo passo.
-
-### 4. Emitir o certificado com Certbot
-
-```bash
-sudo certbot --nginx -d seu-dominio.exemplo.com
-```
-
-O Certbot pergunta um e-mail (para avisos de expiração) e se quer
-redirecionar HTTP para HTTPS automaticamente — responda que sim. Ele edita
-o bloco do Nginx sozinho, adicionando `listen 443 ssl` e os caminhos do
-certificado.
-
-### 5. Renovação automática
-
-O pacote `certbot` já instala um timer systemd que renova sozinho antes do
-vencimento (certificados Let's Encrypt duram 90 dias). Confirme que está
-ativo:
-
-```bash
-systemctl status certbot.timer
-sudo certbot renew --dry-run     # simula a renovação sem gerar certificado novo
-```
-
-### 6. Testar
-
-```bash
-curl -I https://seu-dominio.exemplo.com/
-```
-
-Deve responder `200 OK` com um certificado válido. O `/logs` (console
-remoto) deve conectar normalmente via `wss://` também.
 
 ## Testar sem hardware
 
