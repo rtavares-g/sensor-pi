@@ -41,11 +41,9 @@ interfaces já ficam habilitadas, então rodar `./install.sh` de novo também
 funciona).
 
 No final, ele pergunta se você quer configurar HTTPS com Nginx + Let's
-Encrypt agora (opcional). Se responder que sim, pede o domínio (precisa já
-apontar pro IP público, registro DNS tipo `A`) e o e-mail para o Certbot, e
-configura o proxy reverso e o certificado sozinho - teste depois com
-`curl -I https://seu-dominio/`. Requer as portas 80 e 443 liberadas no
-roteador (port forwarding) para o IP local do Raspberry Pi.
+Encrypt. Responda **não**: o acesso externo é feito pelo Cloudflare Tunnel
+(veja [Acesso remoto](#acesso-remoto-cloudflare-tunnel)), que não precisa
+de Nginx nem de portas abertas no roteador.
 
 ## Instalação manual (passo a passo)
 
@@ -103,7 +101,27 @@ systemctl status sensor-quarto
 journalctl -u sensor-quarto -f
 ```
 
+## Acesso remoto (Cloudflare Tunnel)
+
+O painel escuta só em `127.0.0.1:8080` - não é acessível pela rede
+local nem pela internet diretamente. O acesso externo passa pelo
+Cloudflare Tunnel (`cloudflared`, rodando como serviço neste Raspberry Pi)
+e é protegido pelo Cloudflare Access (login antes de chegar ao painel):
+
+| | |
+|---|---|
+| Domínio | `https://clima.quarto.rtavares.net/` |
+| Rota no túnel (Public Hostname) | `clima.quarto.rtavares.net` → `HTTP` `localhost:8080` |
+| Autenticação | aplicação no Cloudflare Access (Zero Trust → Access → Applications) |
+| Certificado | Advanced Certificate Manager (subdomínio de dois níveis não é coberto pelo Universal SSL) |
+
+Nenhuma porta precisa ficar aberta no roteador. Para voltar a liberar o
+painel na rede local, troque `host_web` no `config.json` para `0.0.0.0` e reinicie o serviço.
+
 ## Endereços
+
+No próprio Pi, em `http://127.0.0.1:8080`, ou de fora em
+`https://clima.quarto.rtavares.net`:
 
 | Caminho | Conteúdo |
 |---|---|
