@@ -3,6 +3,7 @@
   "botao_gpio": 17,
   "display_tipo": "st7789",
   "porta_web": 8080,
+  "host_web": "127.0.0.1",
 
   "st7789": {
     "mosi_gpio": 10,

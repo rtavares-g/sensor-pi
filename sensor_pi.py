@@ -45,6 +45,7 @@ PADROES = {
     "botao_gpio": 17,
     "display_tipo": "lcd",
     "porta_web": 8080,
+    "host_web": "127.0.0.1",
     "lcd_colunas": 16,
     "lcd_linhas": 2,
     "lcd_endereco": "0x27",
@@ -1109,9 +1110,10 @@ async def subir_servidor() -> web.AppRunner:
     await runner.setup()
 
     porta = CFG.get("porta_web", 8080)
-    await web.TCPSite(runner, "0.0.0.0", porta).start()
-    log(f"WEB: http://192.168.1.10:{porta}/")
-    log(f"WEB: http://192.168.1.10:{porta}/logs")
+    host = CFG.get("host_web", "127.0.0.1")
+    await web.TCPSite(runner, host, porta).start()
+    log(f"WEB: http://{host}:{porta}/")
+    log(f"WEB: http://{host}:{porta}/logs")
 
     return runner
 
