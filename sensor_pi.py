@@ -25,6 +25,7 @@ from pathlib import Path
 
 from aiohttp import web, WSMsgType
 import websockets
+from websockets.typing import Subprotocol
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -552,12 +553,12 @@ class Sinric:
         try:
             return await websockets.connect(
                 url, additional_headers=cabecalhos,
-                subprotocols=["arduino"], ping_interval=30, ping_timeout=20,
+                subprotocols=[Subprotocol("arduino")], ping_interval=30, ping_timeout=20,
             )
         except TypeError:
             return await websockets.connect(
                 url, extra_headers=cabecalhos,
-                subprotocols=["arduino"], ping_interval=30, ping_timeout=20,
+                subprotocols=[Subprotocol("arduino")], ping_interval=30, ping_timeout=20,
             )
 
     async def tarefa(self) -> None:
