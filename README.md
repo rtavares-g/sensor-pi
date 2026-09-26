@@ -9,7 +9,6 @@ Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + se
 | DHT22 VCC | GPIO 22 | pino 15 | alimentado pelo GPIO (3,3 V) para o programa religar o sensor quando ele trava; veja abaixo |
 | DHT22 DATA | GPIO 4 | pino 7 | resistor de 10 kΩ entre DATA e 3V3 |
 | DHT22 GND | GND | pino 6 | |
-| Botão | GPIO 17 | pino 11 | outra ponta no GND, usa pull-up interno |
 | Display VCC | 3V3 | pino 17 | |
 | Display GND | GND | pino 9 | |
 | Display SDA (MOSI) | GPIO 10 | pino 19 | biblioteca `st7789` usa nome SPI0 MOSI |
@@ -150,7 +149,7 @@ No próprio Pi, em `http://127.0.0.1:8080`, ou de fora em
 ./venv/bin/python sensor_pi.py --simular
 ```
 
-Roda num PC comum, com sensor falso e sem display nem botão.
+Roda num PC comum, com sensor falso e sem display.
 
 ## Notas de hardware / problemas conhecidos
 
@@ -188,5 +187,5 @@ Roda num PC comum, com sensor falso e sem display nem botão.
 | LCD I2C 16x2 | display TFT SPI 240x240 colorido |
 
 O que **não** mudou: o ciclo único que atualiza sensor, display, console e
-Sinric com os mesmos valores; o botão; e o envelope JSON do Sinric, com
+Sinric com os mesmos valores; e o envelope JSON do Sinric, com
 assinatura HMAC-SHA256 idêntica.

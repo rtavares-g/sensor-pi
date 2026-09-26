@@ -45,7 +45,6 @@ PADROES = {
     # GPIO que alimenta o VCC do DHT22, para religá-lo quando travar.
     # None = VCC no 3V3 fixo, sem religação automática.
     "dht_vcc_gpio": None,
-    "botao_gpio": 17,
     "display_tipo": "lcd",
     "porta_web": 8080,
     "host_web": "127.0.0.1",
