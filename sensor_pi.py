@@ -88,20 +88,20 @@ except json.JSONDecodeError as e:
 class Estado:
     """Estado compartilhado da aplicação."""
     def __init__(self) -> None:
-        self.temperatura = None
-        self.umidade = None
+        self.temperatura: float | None = None
+        self.umidade: float | None = None
         self.sensor_ok = False
         self.falhas_sensor = 0
         self.sinric_ok = False
 
 estado = Estado()
-display = None  # Será inicializado em principal()
+display: DisplayST7789 | None = None  # Será inicializado em principal()
 
 class Console:
     """Redireciona print() e erros (stdout/stderr) para log e WebSocket."""
     def __init__(self) -> None:
-        self.linhas = deque(maxlen=1000)
-        self.clientes = set()
+        self.linhas: deque[str] = deque(maxlen=1000)
+        self.clientes: set[web.WebSocketResponse] = set()
         self.original_stdout = sys.stdout
 
     def stream(self, original, prefixo: str = "") -> "_Fluxo":
@@ -170,13 +170,14 @@ class DisplayST7789:
         self.simular = simular
         self.display = None
         self.imagem = None
-        self.draw = None
-        self.fonte_grande = None
-        self.fonte_media = None
-        self.fonte_pequena = None
-        self.fonte_titulo = None
-        self.historico_temp = deque(maxlen=60)
-        self.historico_umid = deque(maxlen=60)
+        self.draw: ImageDraw.ImageDraw | None = None
+        self.fonte_grande: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        self.fonte_valor: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        self.fonte_media: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        self.fonte_pequena: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        self.fonte_titulo: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+        self.historico_temp: deque[float] = deque(maxlen=60)
+        self.historico_umid: deque[float] = deque(maxlen=60)
         self.alerta_ate = 0.0
         self.backlight = None
         self.nivel_backlight = 1.0
@@ -268,6 +269,7 @@ class DisplayST7789:
 
     def _icone_termometro(self, cx: int, cy: int, altura: int, cor: tuple) -> None:
         """Desenha um termômetro simples. (cx, cy) = centro do bulbo."""
+        assert self.draw is not None
         raio_bulbo = 13
         largura_tubo = 12
         y_topo = cy - altura
@@ -290,6 +292,7 @@ class DisplayST7789:
 
     def _icone_gota(self, cx: int, cy: int, raio: float, cor: tuple) -> None:
         """Desenha uma gota d'água. (cx, cy) = centro aproximado."""
+        assert self.draw is not None
         self.draw.ellipse(
             [cx - raio, cy - raio * 0.3, cx + raio, cy + raio * 1.3],
             fill=cor,
@@ -416,7 +419,7 @@ class LeitorIIO:
             log(f"SENSOR: dispositivo IIO em {caminho}")
         else:
             log("SENSOR: nenhum dispositivo IIO encontrado (in_temp_input)")
-        self.ultimo_erro = None
+        self.ultimo_erro: Exception | None = None
         self.temp = Path(caminho) / "in_temp_input" if caminho else None
         self.umid = Path(caminho) / "in_humidityrelative_input" if caminho else None
 
@@ -923,6 +926,8 @@ async def rota_backlight(request: web.Request) -> web.Response:
 </html>"""
         return web.Response(text=html, content_type="text/html")
 
+    if display is None:
+        return web.json_response({"erro": "display não inicializado"}, status=503)
     if "status" in request.query:
         return web.json_response({"backlight": display.nivel_backlight})
     if "off" in request.query_string:
@@ -1198,7 +1203,8 @@ async def ciclo(leitor, display_obj) -> None:
             )
 
         # Atualizar Sinric a cada 60s
-        if time.monotonic() >= prox_sinric and estado.sensor_ok:
+        if (time.monotonic() >= prox_sinric and estado.sensor_ok
+                and estado.temperatura is not None and estado.umidade is not None):
             enviado = await sinric.enviar_leitura(estado.temperatura, estado.umidade)
             log(f"LEITURA: {estado.temperatura:.1f}°C  {estado.umidade:.1f}%  "
                 f"(Sinric: {'enviado' if enviado else 'não enviado'}, "
