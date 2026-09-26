@@ -6,7 +6,7 @@ Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + se
 
 | Componente | Pino do Raspberry (BCM) | Pino físico | Observação |
 |---|---|---|---|
-| DHT22 VCC | 3V3 | pino 1 | **3,3 V, não 5 V** |
+| DHT22 VCC | GPIO 22 | pino 15 | alimentado pelo GPIO (3,3 V) para o programa religar o sensor quando ele trava; veja abaixo |
 | DHT22 DATA | GPIO 4 | pino 7 | resistor de 10 kΩ entre DATA e 3V3 |
 | DHT22 GND | GND | pino 6 | |
 | Botão | GPIO 17 | pino 11 | outra ponta no GND, usa pull-up interno |
@@ -21,6 +21,20 @@ Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + se
 
 O display é um TFT SPI 240x240 baseado no controlador ST7789 (rotulado
 "SPI-ST7789" na placa, 8 pinos: GND, VCC, SCL, SDA, RST, DC, CS, BL).
+
+
+### Religação automática do DHT22
+
+O DHT22 às vezes trava e para de responder (no `dmesg` aparece
+`dht11 dht11@4: Only 0 signal edges detected` a cada leitura) até perder a
+alimentação. Por isso o VCC dele fica num GPIO (`dht_vcc_gpio` no
+`config.json`, padrão do exemplo: 22): depois de 30s de falhas seguidas o
+programa desliga o sensor por 3s e liga de novo, e repete a cada 1min se
+ele continuar sem responder. No log aparece `SENSOR: religado`.
+
+O sensor consome menos de 2,5 mA, bem dentro do que um GPIO fornece. Para
+alimentar pelo 3V3 fixo (sem religação), ligue o VCC no pino 1 e use
+`"dht_vcc_gpio": null`.
 
 ## Instalação automática
 

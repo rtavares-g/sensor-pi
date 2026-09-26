@@ -42,6 +42,9 @@ ARQUIVO_CONFIG = Path(os.environ.get("SENSOR_CONFIG", RAIZ / "config.json"))
 
 PADROES = {
     "dht_gpio": 4,
+    # GPIO que alimenta o VCC do DHT22, para religá-lo quando travar.
+    # None = VCC no 3V3 fixo, sem religação automática.
+    "dht_vcc_gpio": None,
     "botao_gpio": 17,
     "display_tipo": "lcd",
     "porta_web": 8080,
@@ -403,8 +406,12 @@ class DisplayST7789:
 # =========================================================================
 
 class LeitorIIO:
-    """Lê sensor via kernel IIO (melhor método)."""
-    def __init__(self) -> None:
+    """Lê sensor via kernel IIO (melhor método).
+
+    Se o VCC do DHT22 estiver ligado num GPIO (dht_vcc_gpio), o sensor pode
+    ser religado por software: ele às vezes trava e para de responder
+    ("Only 0 signal edges detected" no dmesg) até perder a alimentação."""
+    def __init__(self, vcc_gpio: int | None = None) -> None:
         caminho = self._procurar()
         if caminho:
             log(f"SENSOR: dispositivo IIO em {caminho}")
@@ -413,6 +420,25 @@ class LeitorIIO:
         self.ultimo_erro = None
         self.temp = Path(caminho) / "in_temp_input" if caminho else None
         self.umid = Path(caminho) / "in_humidityrelative_input" if caminho else None
+
+        self.vcc = None
+        if vcc_gpio is not None:
+            from gpiozero import OutputDevice
+            self.vcc = OutputDevice(vcc_gpio, active_high=True, initial_value=True)
+            log(f"SENSOR: alimentação pelo GPIO {vcc_gpio} (religa sozinho se travar)")
+
+    async def religar(self) -> bool:
+        """Corta a alimentação do sensor por alguns segundos e liga de novo.
+        Retorna False se o VCC não estiver num GPIO."""
+        if not self.vcc:
+            return False
+        self.vcc.off()
+        await asyncio.sleep(3)
+        self.vcc.on()
+        await asyncio.sleep(2)
+        # A 1ª leitura depois de ligar costuma vir errada; descarta.
+        self.ler()
+        return True
 
     @staticmethod
     def _procurar() -> str | None:
@@ -450,7 +476,7 @@ def montar_leitor(simular: bool):
     if simular:
         return LeitorSimulado()
 
-    return LeitorIIO()
+    return LeitorIIO(CFG.get("dht_vcc_gpio"))
 
 # =========================================================================
 # SINRIC PRO (Já implementado como antes)
@@ -1121,6 +1147,11 @@ async def subir_servidor() -> web.AppRunner:
 # LOOP PRINCIPAL
 # =========================================================================
 
+# Com o ciclo de 5s: religa o sensor após 30s de falhas seguidas e, se ele
+# continuar sem responder, tenta de novo a cada 1min.
+FALHAS_PARA_RELIGAR = 6
+FALHAS_ENTRE_RELIGACOES = 12
+
 async def ciclo(leitor, display_obj) -> None:
     prox_sinric = 0.0
     falhas_minuto = 0
@@ -1146,6 +1177,13 @@ async def ciclo(leitor, display_obj) -> None:
                 if estado.falhas_sensor == 4:
                     estado.sensor_ok = False
                     log("SENSOR: marcado como FALHA após 4 leituras seguidas sem sucesso")
+                # Travado: religa após 30s de falhas e, se não voltar, a cada 1min.
+                n = estado.falhas_sensor
+                if n == FALHAS_PARA_RELIGAR or (
+                        n > FALHAS_PARA_RELIGAR and (n - FALHAS_PARA_RELIGAR) % FALHAS_ENTRE_RELIGACOES == 0):
+                    religar = getattr(leitor, "religar", None)
+                    if religar and await religar():
+                        log(f"SENSOR: religado (sem resposta após {n} leituras)")
         except Exception as e:
             estado.sensor_ok = False
             log(f"SENSOR: erro ({e})")

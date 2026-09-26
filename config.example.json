@@ -1,5 +1,6 @@
 {
   "dht_gpio": 4,
+  "dht_vcc_gpio": 22,
   "botao_gpio": 17,
   "display_tipo": "st7789",
   "porta_web": 8080,
