@@ -28,7 +28,7 @@ import websockets
 
 try:
     from PIL import Image, ImageDraw, ImageFont
-    import st7789
+    import st7789  # type: ignore[import-untyped]
     HAS_ST7789 = True
 except ImportError:
     HAS_ST7789 = False
@@ -216,7 +216,7 @@ class DisplayST7789:
             bl_gpio = cfg.get("bl_gpio")
             if bl_gpio is not None:
                 try:
-                    from gpiozero import PWMLED
+                    from gpiozero import PWMLED  # type: ignore[import-untyped]
                     self.backlight = PWMLED(bl_gpio)
                     self.backlight.value = 1.0
                     log(f"DISPLAY: backlight no GPIO {bl_gpio}")
