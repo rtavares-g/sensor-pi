@@ -42,11 +42,17 @@ if [ ! -f config.json ]; then
     read -rsp "App Secret: " SINRIC_APP_SECRET
     echo
 
-    python3 - "$SINRIC_DEVICE_ID" "$SINRIC_APP_KEY" "$SINRIC_APP_SECRET" <<'PYEOF'
+    echo
+    echo "==> Dispositivo TuyaLink (app Tuya/Smart Life) - deixe em branco para pular"
+    read -rp "Tuya Device ID: " TUYA_DEVICE_ID
+    read -rsp "Tuya Device Secret: " TUYA_DEVICE_SECRET
+    echo
+
+    python3 - "$SINRIC_DEVICE_ID" "$SINRIC_APP_KEY" "$SINRIC_APP_SECRET" "$TUYA_DEVICE_ID" "$TUYA_DEVICE_SECRET" <<'PYEOF'
 import json
 import sys
 
-device_id, app_key, app_secret = sys.argv[1:4]
+device_id, app_key, app_secret, tuya_id, tuya_secret = sys.argv[1:6]
 
 with open("config.json") as f:
     cfg = json.load(f)
@@ -57,6 +63,10 @@ if app_key:
     cfg["sinric"]["app_key"] = app_key
 if app_secret:
     cfg["sinric"]["app_secret"] = app_secret
+if tuya_id:
+    cfg["tuya"]["device_id"] = tuya_id
+if tuya_secret:
+    cfg["tuya"]["device_secret"] = tuya_secret
 
 with open("config.json", "w") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)

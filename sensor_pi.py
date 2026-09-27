@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from aiohttp import web, WSMsgType
+import paho.mqtt.client as mqtt
 import websockets
 from websockets.typing import Subprotocol
 
@@ -70,6 +71,13 @@ PADROES = {
         "instancia_temperatura": "temperatura",
         "instancia_umidade": "umidade",
     },
+    # Dispositivo TuyaLink (plataforma de desenvolvedor da Tuya). O host é o
+    # broker MQTT do data center onde o produto foi criado.
+    "tuya": {
+        "device_id": "",
+        "device_secret": "",
+        "host": "m1.tuyacn.com",
+    },
 }
 
 try:
@@ -94,6 +102,7 @@ class Estado:
         self.sensor_ok = False
         self.falhas_sensor = 0
         self.sinric_ok = False
+        self.tuya_ok = False
 
 estado = Estado()
 display: DisplayST7789 | None = None  # Será inicializado em principal()
@@ -609,6 +618,83 @@ class Sinric:
             return False
 
 sinric = Sinric()
+
+# =========================================================================
+# TUYA (TuyaLink via MQTT)
+# =========================================================================
+
+class Tuya:
+    """Dispositivo TuyaLink: publica as propriedades temperatura, umidade e
+    sensor_ok (DP 101-103, valores x10) no app Tuya/Smart Life."""
+    def __init__(self) -> None:
+        self.cliente: mqtt.Client | None = None
+
+    @property
+    def configurado(self) -> bool:
+        return bool(CFG["tuya"]["device_id"] and CFG["tuya"]["device_secret"])
+
+    def _credenciais(self) -> None:
+        # A assinatura leva o timestamp, então é refeita a cada (re)conexão.
+        did, ts = CFG["tuya"]["device_id"], str(int(time.time()))
+        conteudo = f"deviceId={did},timestamp={ts},secureMode=1,accessType=1"
+        senha = hmac.new(CFG["tuya"]["device_secret"].encode(),
+                         conteudo.encode(), hashlib.sha256).hexdigest()
+        assert self.cliente is not None
+        self.cliente.username_pw_set(
+            f"{did}|signMethod=hmacSha256,timestamp={ts},secureMode=1,accessType=1", senha)
+
+    def iniciar(self) -> None:
+        if not self.configurado:
+            log("TUYA: credenciais não configuradas")
+            return
+        did = CFG["tuya"]["device_id"]
+        self.cliente = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"tuyalink_{did}")
+        self.cliente.tls_set()
+        self.cliente.reconnect_delay_set(10, 300)
+        self.cliente.on_connect = self._conectou
+        self.cliente.on_disconnect = self._desconectou
+        self.cliente.on_message = self._mensagem
+        self._credenciais()
+        log("TUYA: conectando...")
+        self.cliente.connect_async(CFG["tuya"]["host"], 8883, keepalive=60)
+        self.cliente.loop_start()
+
+    def _conectou(self, cliente, _u, _f, rc, _p=None) -> None:
+        if rc.is_failure:
+            log(f"TUYA: conexão recusada ({rc})")
+            return
+        estado.tuya_ok = True
+        cliente.subscribe(f"tylink/{CFG['tuya']['device_id']}/thing/property/report_response")
+        log("TUYA: conectado")
+
+    def _desconectou(self, _c, _u, _f, rc, _p=None) -> None:
+        if estado.tuya_ok:
+            log(f"TUYA: desconectado ({rc})")
+        estado.tuya_ok = False
+        self._credenciais()
+
+    def _mensagem(self, _c, _u, msg) -> None:
+        try:
+            codigo = json.loads(msg.payload).get("code")
+        except ValueError:
+            return
+        if codigo != 0:
+            log(f"TUYA: envio recusado ({msg.payload.decode(errors='replace')[:200]})")
+
+    def enviar(self, temp: float | None, umid: float | None, sensor_ok: bool) -> bool:
+        if not self.cliente or not estado.tuya_ok:
+            return False
+        agora = int(time.time() * 1000)
+        dados = {"sensor_ok": {"value": sensor_ok, "time": agora}}
+        if sensor_ok and temp is not None and umid is not None:
+            dados["temperatura"] = {"value": round(temp * 10), "time": agora}
+            dados["umidade"] = {"value": round(umid * 10), "time": agora}
+        payload = {"msgId": str(agora), "time": agora, "sys": {"ack": 1}, "data": dados}
+        info = self.cliente.publish(
+            f"tylink/{CFG['tuya']['device_id']}/thing/property/report", json.dumps(payload), qos=1)
+        return info.rc == mqtt.MQTT_ERR_SUCCESS
+
+tuya = Tuya()
 
 # =========================================================================
 # HTTP ROUTES
@@ -1159,6 +1245,8 @@ FALHAS_ENTRE_RELIGACOES = 12
 
 async def ciclo(leitor, display_obj) -> None:
     prox_sinric = 0.0
+    prox_tuya = 0.0
+    sensor_ok_tuya: bool | None = None
     falhas_minuto = 0
 
     while True:
@@ -1207,11 +1295,23 @@ async def ciclo(leitor, display_obj) -> None:
         if (time.monotonic() >= prox_sinric and estado.sensor_ok
                 and estado.temperatura is not None and estado.umidade is not None):
             enviado = await sinric.enviar_leitura(estado.temperatura, estado.umidade)
+            enviado_tuya = tuya.enviar(estado.temperatura, estado.umidade, True)
             log(f"LEITURA: {estado.temperatura:.1f}°C  {estado.umidade:.1f}%  "
                 f"(Sinric: {'enviado' if enviado else 'não enviado'}, "
+                f"Tuya: {'enviado' if enviado_tuya else 'não enviado'}, "
                 f"falhas de leitura: {falhas_minuto})")
             falhas_minuto = 0
             prox_sinric = time.monotonic() + 60
+            prox_tuya = prox_sinric
+            sensor_ok_tuya = True
+
+        # Com o sensor em falha só a Tuya é avisada (sensor_ok=false): na hora
+        # em que muda e depois a cada 60s.
+        if not estado.sensor_ok and estado.falhas_sensor >= 4 and (
+                sensor_ok_tuya is not False or time.monotonic() >= prox_tuya):
+            if tuya.enviar(None, None, False):
+                sensor_ok_tuya = False
+                prox_tuya = time.monotonic() + 60
 
 async def principal(simular: bool) -> None:
     global display
@@ -1232,8 +1332,9 @@ async def principal(simular: bool) -> None:
     except Exception:
         pass
 
-    # Iniciar Sinric em background
+    # Iniciar Sinric e Tuya em background
     asyncio.create_task(sinric.tarefa())
+    tuya.iniciar()
 
     # Iniciar servidor HTTP
     runner = await subir_servidor()

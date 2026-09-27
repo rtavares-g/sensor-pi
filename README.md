@@ -1,6 +1,7 @@
 # Clima Quarto — Raspberry Pi
 
-Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + servidor web).
+Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + servidor web),
+com os dados também no app Tuya/Smart Life (TuyaLink).
 
 ## Ligações
 
@@ -45,7 +46,8 @@ cd ~/sensor-pi
 
 O `install.sh` instala as dependências do sistema, habilita I2C/SPI/DHT22,
 cria `config.json` a partir do exemplo e pede no terminal o **Device ID**,
-**App Key** e **App Secret** do Sinric Pro (nada de editar arquivo à mão -
+**App Key** e **App Secret** do Sinric Pro e o **Device ID** e **Device
+Secret** da Tuya (nada de editar arquivo à mão -
 se deixar algum campo em branco, ele avisa para completar depois com
 `nano config.json`), monta o venv e instala o serviço. Se for a primeira
 vez habilitando I2C/SPI/DHT22, ele avisa para reiniciar (`sudo reboot`) e,
@@ -113,6 +115,26 @@ sudo systemctl enable --now sensor-quarto
 systemctl status sensor-quarto
 journalctl -u sensor-quarto -f
 ```
+
+## App Tuya (TuyaLink)
+
+O sensor também é um dispositivo TuyaLink, que aparece no app Tuya/Smart
+Life. A cada 60s ele publica por MQTT (TLS, porta 8883) no tópico
+`tylink/<device_id>/thing/property/report`:
+
+| DP | Identificador | Tipo | Valor |
+|---|---|---|---|
+| 101 | `temperatura` | value, escala 1 | °C x10 (243 = 24,3 °C) |
+| 102 | `umidade` | value, escala 1 | % x10 (569 = 56,9 %) |
+| 103 | `sensor_ok` | bool | `false` quando o DHT22 para de responder |
+
+Com o sensor em falha só `sensor_ok=false` é enviado (na hora e a cada
+60s). As credenciais ficam em `config.json` (`tuya.device_id`,
+`tuya.device_secret`), vindas da plataforma de desenvolvedor da Tuya
+(produto → dispositivo). `tuya.host` é o broker do data center onde o
+produto foi criado - `m1.tuyacn.com` (China); os outros estão na
+[documentação do protocolo](https://developer.tuya.com/en/docs/iot/MQTT-protocol?id=Kb65nphxrj8f1).
+Se o `device_id` ficar vazio, a Tuya é simplesmente desligada.
 
 ## Acesso remoto (Cloudflare Tunnel)
 
