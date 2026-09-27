@@ -73,7 +73,7 @@ if [ ! -d venv ]; then
 fi
 ./venv/bin/pip install -r requirements.txt
 
-sudo cp sensor-quarto.service /etc/systemd/system/
+sed -e "s|__USER__|$USER|g" -e "s|__HOME__|$HOME|g" sensor-quarto.service | sudo tee /etc/systemd/system/sensor-quarto.service > /dev/null
 sudo systemctl daemon-reload
 
 if [ "$REBOOT_NEEDED" = "1" ]; then
