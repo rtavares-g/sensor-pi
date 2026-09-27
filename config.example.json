@@ -24,5 +24,11 @@
     "app_secret": "SEU_APP_SECRET_AQUI",
     "instancia_temperatura": "temperatura",
     "instancia_umidade": "umidade"
+  },
+
+  "tuya": {
+    "device_id": "SEU_DEVICE_ID_TUYA_AQUI",
+    "device_secret": "SEU_DEVICE_SECRET_AQUI",
+    "host": "m1.tuyacn.com"
   }
 }
