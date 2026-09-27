@@ -132,7 +132,8 @@ Com o sensor em falha só `sensor_ok=false` é enviado (na hora e a cada
 60s). As credenciais ficam em `config.json` (`tuya.device_id`,
 `tuya.device_secret`), vindas da plataforma de desenvolvedor da Tuya
 (produto → dispositivo). `tuya.host` é o broker do data center onde o
-produto foi criado - `m1.tuyaus.com` (Western America); os outros estão na
+produto foi criado - `m1-ueaz.tuyaus.com` (Eastern America, a região das
+contas brasileiras desde 25/11/2025); os outros estão na
 [documentação do protocolo](https://developer.tuya.com/en/docs/iot/MQTT-protocol?id=Kb65nphxrj8f1).
 Se o `device_id` ficar vazio, a Tuya é simplesmente desligada.
 
