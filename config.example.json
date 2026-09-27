@@ -29,6 +29,6 @@
   "tuya": {
     "device_id": "SEU_DEVICE_ID_TUYA_AQUI",
     "device_secret": "SEU_DEVICE_SECRET_AQUI",
-    "host": "m1.tuyacn.com"
+    "host": "m1.tuyaus.com"
   }
 }
