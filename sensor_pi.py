@@ -76,7 +76,7 @@ PADROES = {
     "tuya": {
         "device_id": "",
         "device_secret": "",
-        "host": "m1.tuyaus.com",
+        "host": "m1-ueaz.tuyaus.com",
     },
 }
 
