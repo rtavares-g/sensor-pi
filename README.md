@@ -123,8 +123,8 @@ e é protegido pelo Cloudflare Access (login antes de chegar ao painel):
 
 | | |
 |---|---|
-| Domínio | `https://clima.quarto.rtavares.net/` |
-| Rota no túnel (Public Hostname) | `clima.quarto.rtavares.net` → `HTTP` `localhost:8080` |
+| Domínio | `https://clima-quarto.tavares.nz/` |
+| Rota no túnel (Public Hostname) | `clima-quarto.tavares.nz` → `HTTP` `localhost:8080` |
 | Autenticação | aplicação no Cloudflare Access (Zero Trust → Access → Applications) |
 | Certificado | Advanced Certificate Manager (subdomínio de dois níveis não é coberto pelo Universal SSL) |
 
@@ -134,7 +134,7 @@ painel na rede local, troque `host_web` no `config.json` para `0.0.0.0` e reinic
 ## Endereços
 
 No próprio Pi, em `http://127.0.0.1:8080`, ou de fora em
-`https://clima.quarto.rtavares.net`:
+`https://clima-quarto.tavares.nz`:
 
 | Caminho | Conteúdo |
 |---|---|
