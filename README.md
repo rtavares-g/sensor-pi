@@ -6,6 +6,13 @@ Porte do projeto Arduino Mega 2560 (DHT22 + display ST7789 TFT + Sinric Pro + se
 
 | Componente | Pino do Raspberry (BCM) | Pino físico | Observação |
 |---|---|---|---|
+> **Desde 2026-10-06 o DHT22 foi retirado** e o display mostra a leitura de
+> um sensor do Home Assistant (`"fonte": "ha"` no `config.json`, com
+> `ha_temperatura`/`ha_umidade` = entidades do HA e `~/.config/ha-api.json`
+> com `{"url": ..., "token": ...}`). Os pinos 7 (GPIO 4) e 15 (GPIO 22)
+> ficaram livres e o `dtoverlay=dht11` saiu do `config.txt`. A tabela abaixo
+> vale para quem usar o DHT22 (`"fonte": "dht"`).
+
 | DHT22 VCC | GPIO 22 | pino 15 | alimentado pelo GPIO (3,3 V) para o programa religar o sensor quando ele trava; veja abaixo |
 | DHT22 DATA | GPIO 4 | pino 7 | resistor de 10 kΩ entre DATA e 3V3 |
 | DHT22 GND | GND | pino 6 | |

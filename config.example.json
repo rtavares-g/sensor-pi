@@ -1,10 +1,13 @@
 {
+  "fonte": "dht",
+  "ha_config": "~/.config/ha-api.json",
+  "ha_temperatura": "",
+  "ha_umidade": "",
   "dht_gpio": 4,
   "dht_vcc_gpio": 22,
   "display_tipo": "st7789",
   "porta_web": 8080,
   "host_web": "127.0.0.1",
-
   "st7789": {
     "mosi_gpio": 10,
     "sclk_gpio": 11,
@@ -17,7 +20,6 @@
     "rotation": 0,
     "spi_speed_hz": 16000000
   },
-
   "sinric": {
     "device_id": "SEU_DEVICE_ID_AQUI",
     "app_key": "SUA_APP_KEY_AQUI",

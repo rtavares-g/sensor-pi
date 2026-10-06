@@ -42,6 +42,12 @@ RAIZ = Path(__file__).resolve().parent
 ARQUIVO_CONFIG = Path(os.environ.get("SENSOR_CONFIG", RAIZ / "config.json"))
 
 PADROES = {
+    # De onde vem a leitura: "dht" (DHT22 no GPIO, via kernel IIO) ou "ha"
+    # (entidades de temperatura/umidade do Home Assistant, ex.: sensor Zigbee)
+    "fonte": "dht",
+    "ha_config": "~/.config/ha-api.json",   # {"url": ..., "token": ...}
+    "ha_temperatura": "",                   # ex.: sensor.quarto_temperatura
+    "ha_umidade": "",
     "dht_gpio": 4,
     # GPIO que alimenta o VCC do DHT22, para religá-lo quando travar.
     # None = VCC no 3V3 fixo, sem religação automática.
@@ -463,6 +469,44 @@ class LeitorIIO:
             self.ultimo_erro = erro
             return None
 
+class LeitorHA:
+    """Lê temperatura e umidade de entidades do Home Assistant (API REST)."""
+    def __init__(self) -> None:
+        self.ultimo_erro: Exception | str | None = None
+        self.url = self.token = ""
+        try:
+            with open(os.path.expanduser(CFG["ha_config"])) as f:
+                c = json.load(f)
+            self.url, self.token = c["url"].rstrip("/"), c["token"]
+        except (OSError, ValueError, KeyError) as e:
+            log(f"SENSOR: sem configuração do HA em {CFG['ha_config']} ({e})")
+        self.ent_temp = CFG.get("ha_temperatura") or ""
+        self.ent_umid = CFG.get("ha_umidade") or ""
+        if self.ent_temp:
+            log(f"SENSOR: lendo do Home Assistant ({self.ent_temp}, {self.ent_umid or '-'})")
+        else:
+            log("SENSOR: fonte HA sem entidade configurada (ha_temperatura no config.json)")
+
+    def _valor(self, entidade: str) -> float:
+        import urllib.request
+        req = urllib.request.Request(f"{self.url}/api/states/{entidade}",
+                                     headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            return float(json.load(r)["state"])   # "unavailable" -> ValueError
+
+    def ler(self) -> tuple[float, float | None] | None:
+        if not (self.url and self.ent_temp):
+            self.ultimo_erro = "sensor do HA não configurado"
+            return None
+        try:
+            temp = self._valor(self.ent_temp)
+            umid = self._valor(self.ent_umid) if self.ent_umid else None
+            self.ultimo_erro = None
+            return temp, umid
+        except Exception as erro:
+            self.ultimo_erro = erro
+            return None
+
 class LeitorSimulado:
     """Simula sensor para testes."""
     def __init__(self):
@@ -479,6 +523,8 @@ def montar_leitor(simular: bool):
     if simular:
         return LeitorSimulado()
 
+    if CFG.get("fonte") == "ha":
+        return LeitorHA()
     return LeitorIIO(CFG.get("dht_vcc_gpio"))
 
 # =========================================================================
@@ -1168,8 +1214,9 @@ async def ciclo(leitor, display_obj) -> None:
             leitura = leitor.ler()
             if leitura:
                 if estado.falhas_sensor >= 2:
+                    umid_txt = f"{leitura[1]:.1f}%" if leitura[1] is not None else "-"
                     log(f"SENSOR: leitura OK após {estado.falhas_sensor} falha(s) "
-                        f"({leitura[0]:.1f}°C, {leitura[1]:.1f}%)")
+                        f"({leitura[0]:.1f}°C, {umid_txt})")
                 estado.temperatura, estado.umidade = leitura
                 estado.sensor_ok = True
                 estado.falhas_sensor = 0
