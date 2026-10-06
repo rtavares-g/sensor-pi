@@ -1268,7 +1268,7 @@ async def principal(simular: bool) -> None:
     await asyncio.sleep(1)
 
     leitor = montar_leitor(simular)
-    log(f"SENSOR: {'simulado' if simular else 'usando kernel (IIO)'}")
+    log(f"SENSOR: {'simulado' if simular else ('Home Assistant' if CFG.get('fonte') == 'ha' else 'usando kernel (IIO)')}")
 
     # Obter IP
     try:
